@@ -5,20 +5,21 @@ from gpiozero import LED
 
 LED_PIN = 17
 _led = None
+
+# スレッドのロック（1点滅 = 1スレッド とする）
 _notification_lock = Lock()
 
 
 # LEDの初期化
-_led = LED(LED_PIN) # LEDの初期化
+_led = LED(LED_PIN)
 
 
 # LED点滅
 def _blink_pattern() -> None:
     if _led is None:
-        print("[REMINDER] LED点滅の代わりにコンソールへ出力しました。")
         return
 
-    # すでにLEDが点滅している場合は、新しい点滅を重ねない
+    # すでに点滅している場合は飛ばす
     if not _notification_lock.acquire(blocking=False):
         return
 
@@ -34,7 +35,6 @@ def _blink_pattern() -> None:
 
 
  # LED点滅を開始する関数
- # 点滅はバックグラウンド実行
 def notify_reminder() -> None:
     thread = Thread(target=_blink_pattern, daemon=True)
     thread.start()
