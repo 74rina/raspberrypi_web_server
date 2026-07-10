@@ -1,7 +1,5 @@
 from __future__ import annotations
-
 from flask import Flask, jsonify, render_template, request
-
 from hardware import notify_reminder
 from reminders import ReminderService, ReminderValidationError
 
@@ -14,24 +12,21 @@ reminder_service = ReminderService(
 reminder_service.start()
 
 
+# 画面本体の表示
 @app.get("/")
 def index():
-    """リマインダー画面を表示する。"""
-
     return render_template("index.html")
 
 
+# リマインダー一覧を取得するAPI
 @app.get("/api/reminders")
 def get_reminders():
-    """登録されたリマインダー一覧を返す。"""
-
     return jsonify(reminder_service.list_reminders())
 
 
+# リマインダーを登録するAPI
 @app.post("/api/reminders")
 def create_reminder():
-    """やることと通知日時を受け取り、リマインダーを登録する。"""
-
     data = request.get_json(silent=True) or request.form
 
     try:
@@ -50,10 +45,9 @@ def create_reminder():
     ), 201
 
 
+# リマインダーを「完了」の状態にするAPI
 @app.post("/api/reminders/<reminder_id>/complete")
-def complete_reminder(reminder_id: str):
-    """リマインダーを完了にする。"""
-
+def complete_reminder(reminder_id):
     reminder = reminder_service.update_status(
         reminder_id=reminder_id,
         status="done",
@@ -69,11 +63,9 @@ def complete_reminder(reminder_id: str):
         }
     )
 
-
+# リマインダーを取り消すAPI
 @app.post("/api/reminders/<reminder_id>/cancel")
-def cancel_reminder(reminder_id: str):
-    """リマインダーを取り消す。"""
-
+def cancel_reminder(reminder_id):
     reminder = reminder_service.update_status(
         reminder_id=reminder_id,
         status="canceled",
@@ -90,10 +82,9 @@ def cancel_reminder(reminder_id: str):
     )
 
 
+# LED点灯テスト用API
 @app.post("/api/test-led")
 def test_led():
-    """LEDだけをすぐに光らせる。"""
-
     notify_reminder()
 
     return jsonify(
@@ -103,6 +94,7 @@ def test_led():
     )
 
 
+# 404エラー
 @app.errorhandler(404)
 def not_found(_error):
     return jsonify(

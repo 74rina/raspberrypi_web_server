@@ -73,3 +73,13 @@ hostname -I
 - `POST /api/reminders/<reminder_id>/cancel` リマインダーを取り消す
 
 - `POST /api/test-led` LED点灯テスト用
+
+### データフロー
+
+1. フロントエンド `index.html` から各APIが叩かれ、バックエンドに移る。
+
+2. `app.py` 内の該当APIのコードが実行される。
+
+3. 2 では `reminders.py` 内の `ReminderService` クラスのメソッドが呼び出され、実行される。
+
+4. 必要に応じて、`hardware.py` 内のLED点滅コードが実行される。
