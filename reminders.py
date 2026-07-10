@@ -103,8 +103,6 @@ class ReminderService:
 
     # 通知時刻を監視するスレッドを開始
     def start(self) -> None:
-        """通知時刻を監視するスレッドを開始する。"""
-
         if self._thread and self._thread.is_alive():
             return
 
@@ -127,7 +125,7 @@ class ReminderService:
 
         if not normalized_todo:
             raise ReminderValidationError(
-                "入力してください"
+                "入力してください。"
             )
 
         if len(normalized_todo) > 120:
@@ -197,7 +195,7 @@ class ReminderService:
 
         if not text:
             raise ReminderValidationError(
-                "入力してください"
+                "入力してください。"
             )
 
         try:
@@ -216,8 +214,9 @@ class ReminderService:
 
 
     #
-    # 時刻の監視
+    # 時刻を監視するスレッド
     #
+    
     # 通知時刻を定期的に確認
     def _run_scheduler(self) -> None:
         while not self._stop_event.wait(self._check_interval_seconds):
@@ -234,7 +233,7 @@ class ReminderService:
 
 
     # 通知時刻を過ぎたリマインダーを通知済みに変更
-    def _mark_due_reminders(self) -> list[dict[str, str]]:
+    def _mark_due_reminders(self):
         now = _now()
         notified_at = now.isoformat(timespec="seconds")
         due_reminders: list[dict[str, str]] = []
@@ -248,6 +247,7 @@ class ReminderService:
                     reminder["remind_at"]
                 )
 
+                # 過去リマインドのステータスを変更
                 if remind_at <= now:
                     reminder["status"] = "notified"
                     reminder["notified_at"] = notified_at
@@ -260,16 +260,14 @@ class ReminderService:
         return due_reminders
 
 
-    #
-    # データの永続化
-    #
     # 保存済みのリマインダーをJSONファイルから読み込む
-    def _load_reminders(self) -> list[dict[str, str]]:
+    def _load_reminders(self):
         DATA_DIR.mkdir(exist_ok=True)
 
         if not DATA_FILE.exists():
             return []
 
+        # JSONファイルの中身を取得する
         try:
             with DATA_FILE.open("r", encoding="utf-8") as file:
                 reminders = json.load(file)
@@ -291,7 +289,7 @@ class ReminderService:
 
 
     # リマインダー一覧をJSONファイルへ保存
-    def _save_locked(self) -> None:
+    def _save_locked(self):
         DATA_DIR.mkdir(exist_ok=True)
 
         with DATA_FILE.open("w", encoding="utf-8") as file:
@@ -304,10 +302,7 @@ class ReminderService:
 
 
     # 指定されたIDのリマインダーを探す
-    def _find_locked(
-        self,
-        reminder_id: str,
-    ) -> dict[str, str] | None:
+    def _find_locked(self, reminder_id):
         for reminder in self._reminders:
             if reminder.get("id") == reminder_id:
                 return reminder
