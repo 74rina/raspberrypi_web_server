@@ -15,8 +15,6 @@ LOG_DIR = BASE_DIR / "logs"
 DATA_FILE = DATA_DIR / "reminders.json"
 LOG_FILE = LOG_DIR / "reminder.log"
 
-CHECK_INTERVAL_SECONDS = 1
-
 STATUS_LABELS = {
     "pending": "待機中",
     "notified": "通知済み",
@@ -50,14 +48,17 @@ if not reminder_logger.handlers:
     reminder_logger.addHandler(file_handler)
 
 
+# 現在時刻をタイムゾーン付きで取得
 def _now() -> datetime:
     return datetime.now().astimezone()
 
 
+# ローカル環境のタイムゾーンを取得
 def _local_timezone():
     return _now().tzinfo
 
 
+# 日時文字列を画面表示用の形式に変換
 def _format_datetime(value: str | None) -> str:
     if not value:
         return "-"
@@ -72,10 +73,12 @@ def _format_datetime(value: str | None) -> str:
     )
 
 
+# ログに出力する文字列から余分な空白や改行を削除
 def _clean_log_text(value: str) -> str:
     return " ".join(value.split())
 
 
+# リマインダーを画面表示用のデータに変換
 def _serialize(reminder: dict[str, str]) -> dict[str, str]:
     serialized = dict(reminder)
     serialized["status_label"] = STATUS_LABELS.get(
@@ -95,6 +98,7 @@ def _serialize(reminder: dict[str, str]) -> dict[str, str]:
     return serialized
 
 
+# リマインダー一覧を並び替えるためのキーを作成
 def _sort_key(reminder: dict[str, str]):
     status_order = {
         "pending": 0,
@@ -118,23 +122,20 @@ def _sort_key(reminder: dict[str, str]):
         or reminder.get("created_at", ""),
     )
 
-
+#
+# リマインダーの保存、状態更新、通知時刻の監視するクラス
+#
 class ReminderService:
-    """リマインダーの保存、状態更新、通知時刻の監視を担当する。"""
+    def __init__(self, notify_callback):
+        self._notify_callback = notify_callback # 通知時に実行される
+        self._check_interval_seconds = 1 # 時刻を監視する間隔(s)
+        self._lock = Lock() # 1つのリマインダーを同時に変更しないためのロック
+        self._stop_event = Event() # 監視スレッドを止める
+        self._thread: Thread | None = None # 通知時刻を監視するスレッド
+        self._reminders = self._load_reminders() # 保存済みリマインダー一覧
 
-    def __init__(
-        self,
-        *,
-        notify_callback: Callable[[], None],
-        check_interval_seconds: int = CHECK_INTERVAL_SECONDS,
-    ) -> None:
-        self._notify_callback = notify_callback
-        self._check_interval_seconds = check_interval_seconds
-        self._lock = Lock()
-        self._stop_event = Event()
-        self._thread: Thread | None = None
-        self._reminders = self._load_reminders()
 
+    # 通知時刻を監視するスレッドを開始
     def start(self) -> None:
         """通知時刻を監視するスレッドを開始する。"""
 
@@ -147,7 +148,9 @@ class ReminderService:
         )
         self._thread.start()
 
-    def list_reminders(self) -> list[dict[str, str]]:
+
+    # リマインダー一覧を取得
+    def list_reminders(self):
         """画面表示用にリマインダー一覧を返す。"""
 
         with self._lock:
@@ -158,19 +161,14 @@ class ReminderService:
 
             return [_serialize(reminder) for reminder in reminders]
 
-    def create_reminder(
-        self,
-        *,
-        todo: str,
-        remind_at_text: str,
-    ) -> dict[str, str]:
-        """入力された内容からリマインダーを作成する。"""
 
+    # リマインダーを作成
+    def create_reminder(self, todo, remind_at_text):
         normalized_todo = " ".join(todo.split())
 
         if not normalized_todo:
             raise ReminderValidationError(
-                "やることを入力するニャン😸"
+                "入力してください"
             )
 
         if len(normalized_todo) > 120:
@@ -181,6 +179,7 @@ class ReminderService:
         remind_at = self._parse_remind_at(remind_at_text)
         created_at = _now().isoformat(timespec="seconds")
 
+        # リマインダー本体を生成
         reminder = {
             "id": uuid4().hex,
             "todo": normalized_todo,
@@ -204,14 +203,9 @@ class ReminderService:
 
         return _serialize(reminder)
 
-    def update_status(
-        self,
-        *,
-        reminder_id: str,
-        status: str,
-    ) -> dict[str, str] | None:
-        """リマインダーの状態を更新する。"""
 
+    # リマインダーの状態を更新
+    def update_status(self, reminder_id, status):
         if status not in {"done", "canceled"}:
             raise ValueError(f"invalid status: {status}")
 
@@ -236,7 +230,36 @@ class ReminderService:
         )
 
         return serialized
+    
+    
+    # 入力された日時をPythonで扱える日時データに変換
+    def _parse_remind_at(self, value: str) -> datetime:
+        text = value.strip()
 
+        if not text:
+            raise ReminderValidationError(
+                "入力してください"
+            )
+
+        try:
+            remind_at = datetime.fromisoformat(text)
+        except ValueError as exc:
+            raise ReminderValidationError(
+                "日時の形式が正しくありません。"
+            ) from exc
+
+        if remind_at.tzinfo is None:
+            remind_at = remind_at.replace(tzinfo=_local_timezone())
+        else:
+            remind_at = remind_at.astimezone(_local_timezone())
+
+        return remind_at
+
+
+    #
+    # 時刻の監視
+    #
+    # 通知時刻を定期的に確認
     def _run_scheduler(self) -> None:
         while not self._stop_event.wait(self._check_interval_seconds):
             due_reminders = self._mark_due_reminders()
@@ -250,6 +273,7 @@ class ReminderService:
                 )
                 self._notify_callback()
 
+    # 通知時刻を過ぎたリマインダーを通知済みに変更
     def _mark_due_reminders(self) -> list[dict[str, str]]:
         now = _now()
         notified_at = now.isoformat(timespec="seconds")
@@ -275,28 +299,11 @@ class ReminderService:
 
         return due_reminders
 
-    def _parse_remind_at(self, value: str) -> datetime:
-        text = value.strip()
 
-        if not text:
-            raise ReminderValidationError(
-                "何時に知らせてほしい？😻"
-            )
-
-        try:
-            remind_at = datetime.fromisoformat(text)
-        except ValueError as exc:
-            raise ReminderValidationError(
-                "日時の形式が正しくありません。"
-            ) from exc
-
-        if remind_at.tzinfo is None:
-            remind_at = remind_at.replace(tzinfo=_local_timezone())
-        else:
-            remind_at = remind_at.astimezone(_local_timezone())
-
-        return remind_at
-
+    #
+    # データの永続化
+    #
+    # 保存済みのリマインダーをJSONファイルから読み込む
     def _load_reminders(self) -> list[dict[str, str]]:
         DATA_DIR.mkdir(exist_ok=True)
 
@@ -322,6 +329,8 @@ class ReminderService:
             if isinstance(reminder, dict)
         ]
 
+
+    # リマインダー一覧をJSONファイルへ保存
     def _save_locked(self) -> None:
         DATA_DIR.mkdir(exist_ok=True)
 
@@ -333,6 +342,8 @@ class ReminderService:
                 indent=2,
             )
 
+
+    # 指定されたIDのリマインダーを探す
     def _find_locked(
         self,
         reminder_id: str,
