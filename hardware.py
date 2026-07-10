@@ -1,44 +1,19 @@
 from pathlib import Path
 from threading import Lock, Thread
 from time import sleep
+from gpiozero import LED
 
 LED_PIN = 17
-
 _led = None
 _notification_lock = Lock()
 
 
-def _is_raspberry_pi() -> bool:
-    cpuinfo_path = Path("/proc/cpuinfo")
-
-    if not cpuinfo_path.exists():
-        return False
-
-    try:
-        cpuinfo = cpuinfo_path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-
-    return "Raspberry Pi" in cpuinfo or "BCM" in cpuinfo
+# LEDの初期化
+_led = LED(LED_PIN) # LEDの初期化
 
 
-try:
-    if not _is_raspberry_pi():
-        raise RuntimeError("Raspberry Piではない環境です。")
-
-    from gpiozero import LED
-
-    _led = LED(LED_PIN)
-    print(f"LEDをGPIO{LED_PIN}で初期化しました。")
-except Exception as exc:
-    # GPIOが使えないMacなどでもWebサーバ部分だけテストできるようにする
-    print(f"LEDを初期化できませんでした: {exc}")
-    print("LEDなしのテストモードで起動します。")
-
-
+# LED点滅
 def _blink_pattern() -> None:
-    """リマインダー通知時のLED点滅パターン。"""
-
     if _led is None:
         print("[REMINDER] LED点滅の代わりにコンソールへ出力しました。")
         return
@@ -58,13 +33,8 @@ def _blink_pattern() -> None:
         _notification_lock.release()
 
 
+ # LED点滅を開始する関数
+ # 点滅はバックグラウンド実行
 def notify_reminder() -> None:
-    """
-    LED点滅を別スレッドで開始する。
-
-    Webサーバのリクエスト処理を止めないため、
-    点滅処理はバックグラウンドで実行する。
-    """
-
     thread = Thread(target=_blink_pattern, daemon=True)
     thread.start()
