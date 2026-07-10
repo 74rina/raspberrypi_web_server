@@ -1,260 +1,323 @@
 <!doctype html>
 <html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1"
-    >
-    <title>Raspberry Pi Web Security Monitor</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Raspberry Pi Reminder System</title>
     <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='style.css') }}"
-    >
-</head>
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
 
-<body>
+  <body>
     <main class="container">
-        <header>
-            <p class="eyebrow">Raspberry Pi Security System</p>
-            <h1>Webアクセス監視システム</h1>
-            <p class="description">
-                不審なURLや短時間の大量アクセスを検知し、
-                Raspberry PiのLEDで通知します。
-            </p>
-        </header>
+      <header class="page-header">
+        <p class="eyebrow">Raspberry Pi Reminder</p>
+        <h1>リマインねこ</h1>
+      </header>
 
-        <section class="status-card">
-            <div>
-                <p class="label">直近のアクセス判定</p>
-                <p id="statusText" class="status normal">
-                    NORMAL
-                </p>
-            </div>
+      <section class="status-panel">
+        <div>
+          <p class="label">現在の状態</p>
+          <p id="statusText" class="status waiting">WAITING</p>
+        </div>
 
-            <p id="statusDetail">
-                アクセス履歴を取得しています。
-            </p>
-        </section>
+        <p id="statusDetail">リマインダーを読み込んでいます。</p>
+      </section>
 
-        <section class="test-panel">
-            <h2>検知テスト</h2>
+      <section class="form-panel">
+        <h2>新しいリマインダー</h2>
 
-            <p>
-                警告条件：
-                {{ rate_limit_window }}秒以内に
-                {{ rate_limit_requests }}回以上のアクセス
-            </p>
+        <form id="reminderForm">
+          <div class="form-grid">
+            <label>
+              <span>やること</span>
+              <input
+                id="todoInput"
+                name="todo"
+                type="text"
+                maxlength="120"
+                autocomplete="off"
+                required
+              />
+            </label>
 
-            <div class="button-group">
-                <button id="attackButton" class="danger-button">
-                    /attack にアクセス
-                </button>
+            <label>
+              <span>知らせる日時</span>
+              <input
+                id="remindAtInput"
+                name="remind_at"
+                type="datetime-local"
+                step="1"
+                required
+              />
+            </label>
+          </div>
 
-                <button id="burstButton" class="warning-button">
-                    大量アクセスを模擬
-                </button>
-            </div>
+          <div class="button-group">
+            <button type="submit" class="primary-button">登録</button>
 
-            <p id="testMessage" class="test-message"></p>
-        </section>
+            <button id="testLedButton" type="button" class="secondary-button">
+              LEDテスト
+            </button>
+          </div>
+        </form>
 
-        <section class="event-panel">
-            <div class="section-heading">
-                <h2>アクセス履歴</h2>
-                <span>自動更新</span>
-            </div>
+        <p id="formMessage" class="message"></p>
+      </section>
 
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>時刻</th>
-                            <th>IPアドレス</th>
-                            <th>メソッド</th>
-                            <th>アクセス先</th>
-                            <th>判定</th>
-                            <th>理由</th>
-                        </tr>
-                    </thead>
+      <section class="list-panel">
+        <div class="section-heading">
+          <h2>リマインダー一覧</h2>
+          <span>自動更新</span>
+        </div>
 
-                    <tbody id="eventsBody">
-                        <tr>
-                            <td colspan="6">
-                                アクセス履歴を読み込んでいます。
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>通知日時</th>
+                <th>やること</th>
+                <th>状態</th>
+                <th>作成日時</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+
+            <tbody id="remindersBody">
+              <tr>
+                <td colspan="5">リマインダーを読み込んでいます。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
 
     <script>
-        const statusText =
-            document.getElementById("statusText");
-        const statusDetail =
-            document.getElementById("statusDetail");
-        const eventsBody =
-            document.getElementById("eventsBody");
-        const attackButton =
-            document.getElementById("attackButton");
-        const burstButton =
-            document.getElementById("burstButton");
-        const testMessage =
-            document.getElementById("testMessage");
+      const statusText = document.getElementById("statusText");
+      const statusDetail = document.getElementById("statusDetail");
+      const reminderForm = document.getElementById("reminderForm");
+      const todoInput = document.getElementById("todoInput");
+      const remindAtInput = document.getElementById("remindAtInput");
+      const formMessage = document.getElementById("formMessage");
+      const remindersBody = document.getElementById("remindersBody");
+      const testLedButton = document.getElementById("testLedButton");
 
-        function createCell(value) {
-            const cell = document.createElement("td");
-            cell.textContent = value;
-            return cell;
-        }
+      function toDatetimeLocalValue(date) {
+        const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+        const localDate = new Date(date.getTime() - offsetMs);
 
-        function updateStatus(event) {
-            if (!event) {
-                statusText.textContent = "NO DATA";
-                statusText.className = "status";
-                statusDetail.textContent =
-                    "まだアクセス履歴がありません。";
-                return;
-            }
+        return localDate.toISOString().slice(0, 19);
+      }
 
-            statusText.textContent = event.status;
-            statusText.className =
-                event.status === "ALERT"
-                    ? "status alert"
-                    : "status normal";
+      function setDefaultDatetime() {
+        const defaultDate = new Date(Date.now() + 60 * 1000);
+        const minDate = new Date(Date.now() - 60 * 1000);
 
-            statusDetail.textContent =
-                event.status === "ALERT"
-                    ? event.reason
-                    : "不審なアクセスは検知されていません。";
-        }
+        remindAtInput.value = toDatetimeLocalValue(defaultDate);
+        remindAtInput.min = toDatetimeLocalValue(minDate);
+      }
 
-        function renderEvents(events) {
-            eventsBody.replaceChildren();
+      function createCell(value) {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        return cell;
+      }
 
-            if (events.length === 0) {
-                const row = document.createElement("tr");
-                const cell = createCell(
-                    "まだアクセス履歴がありません。"
-                );
+      function createActionButton(text, className, onClick) {
+        const button = document.createElement("button");
 
-                cell.colSpan = 6;
-                row.appendChild(cell);
-                eventsBody.appendChild(row);
-                return;
-            }
+        button.type = "button";
+        button.className = className;
+        button.textContent = text;
+        button.addEventListener("click", onClick);
 
-            for (const event of events) {
-                const row = document.createElement("tr");
+        return button;
+      }
 
-                if (event.status === "ALERT") {
-                    row.classList.add("alert-row");
-                }
-
-                row.appendChild(createCell(event.time));
-                row.appendChild(createCell(event.ip));
-                row.appendChild(createCell(event.method));
-                row.appendChild(createCell(event.target));
-                row.appendChild(createCell(event.status));
-                row.appendChild(createCell(event.reason));
-
-                eventsBody.appendChild(row);
-            }
-        }
-
-        async function refreshEvents() {
-            try {
-                const response = await fetch(
-                    "/api/events",
-                    { cache: "no-store" }
-                );
-
-                if (!response.ok) {
-                    throw new Error(
-                        `HTTP ${response.status}`
-                    );
-                }
-
-                const events = await response.json();
-
-                renderEvents(events);
-                updateStatus(events[0]);
-            } catch (error) {
-                statusDetail.textContent =
-                    `履歴を取得できませんでした: ${error}`;
-            }
-        }
-
-        attackButton.addEventListener(
-            "click",
-            async () => {
-                attackButton.disabled = true;
-                testMessage.textContent =
-                    "攻撃テストを送信しています。";
-
-                try {
-                    const response = await fetch(
-                        "/attack",
-                        { cache: "no-store" }
-                    );
-
-                    const result = await response.json();
-
-                    testMessage.textContent =
-                        result.message;
-
-                    await refreshEvents();
-                } catch (error) {
-                    testMessage.textContent =
-                        `テストに失敗しました: ${error}`;
-                } finally {
-                    attackButton.disabled = false;
-                }
-            }
+      function updateStatus(reminders) {
+        const pendingReminder = reminders.find(
+          (reminder) => reminder.status === "pending",
+        );
+        const notifiedReminder = reminders.find(
+          (reminder) => reminder.status === "notified",
         );
 
-        burstButton.addEventListener(
-            "click",
-            async () => {
-                burstButton.disabled = true;
-                testMessage.textContent =
-                    "短時間に12回アクセスしています。";
+        if (pendingReminder) {
+          statusText.textContent = "WAITING";
+          statusText.className = "status waiting";
+          statusDetail.textContent = `${pendingReminder.remind_at_display} / ${pendingReminder.todo}`;
+          return;
+        }
 
-                const testId = Date.now();
+        if (notifiedReminder) {
+          statusText.textContent = "NOTIFIED";
+          statusText.className = "status notified";
+          statusDetail.textContent = `${notifiedReminder.todo} の時間です。`;
+          return;
+        }
 
-                try {
-                    const requests = [];
+        statusText.textContent = "NO DATA";
+        statusText.className = "status";
+        statusDetail.textContent = "待機中のリマインダーはありません。";
+      }
 
-                    for (let i = 0; i < 12; i += 1) {
-                        requests.push(
-                            fetch(
-                                `/probe?n=${testId}-${i}`,
-                                { cache: "no-store" }
-                            )
-                        );
-                    }
+      async function updateReminderStatus(id, action) {
+        const response = await fetch(`/api/reminders/${id}/${action}`, {
+          method: "POST",
+          cache: "no-store",
+        });
 
-                    await Promise.all(requests);
+        const result = await response.json();
 
-                    testMessage.textContent =
-                        "大量アクセスの送信が完了しました。";
+        if (!response.ok) {
+          throw new Error(result.error || "更新に失敗しました。");
+        }
 
-                    await refreshEvents();
-                } catch (error) {
-                    testMessage.textContent =
-                        `テストに失敗しました: ${error}`;
-                } finally {
-                    burstButton.disabled = false;
-                }
-            }
+        formMessage.textContent = result.message;
+        await refreshReminders();
+      }
+
+      function renderReminders(reminders) {
+        remindersBody.replaceChildren();
+
+        if (reminders.length === 0) {
+          const row = document.createElement("tr");
+          const cell = createCell("まだリマインダーがありません。");
+
+          cell.colSpan = 5;
+          row.appendChild(cell);
+          remindersBody.appendChild(row);
+          return;
+        }
+
+        for (const reminder of reminders) {
+          const row = document.createElement("tr");
+
+          row.classList.add(`status-${reminder.status}`);
+          row.appendChild(createCell(reminder.remind_at_display));
+          row.appendChild(createCell(reminder.todo));
+          row.appendChild(createCell(reminder.status_label));
+          row.appendChild(createCell(reminder.created_at_display));
+
+          const actionCell = document.createElement("td");
+          const actions = document.createElement("div");
+
+          actions.className = "row-actions";
+
+          if (reminder.status === "pending" || reminder.status === "notified") {
+            actions.appendChild(
+              createActionButton("完了", "small-button complete-button", () =>
+                updateReminderStatus(reminder.id, "complete"),
+              ),
+            );
+          }
+
+          if (reminder.status === "pending") {
+            actions.appendChild(
+              createActionButton("取消", "small-button cancel-button", () =>
+                updateReminderStatus(reminder.id, "cancel"),
+              ),
+            );
+          }
+
+          if (actions.childElementCount === 0) {
+            actionCell.textContent = "-";
+          } else {
+            actionCell.appendChild(actions);
+          }
+
+          row.appendChild(actionCell);
+          remindersBody.appendChild(row);
+        }
+      }
+
+      async function refreshReminders() {
+        try {
+          const response = await fetch("/api/reminders", { cache: "no-store" });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const reminders = await response.json();
+
+          renderReminders(reminders);
+          updateStatus(reminders);
+        } catch (error) {
+          statusText.textContent = "ERROR";
+          statusText.className = "status error";
+          statusDetail.textContent = `リマインダーを取得できませんでした: ${error}`;
+        }
+      }
+
+      reminderForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const submitButton = reminderForm.querySelector(
+          "button[type='submit']",
         );
+        const payload = {
+          todo: todoInput.value,
+          remind_at: remindAtInput.value,
+        };
 
-        refreshEvents();
+        submitButton.disabled = true;
+        formMessage.textContent = "登録しています。";
 
-        // 1秒ごとに履歴を更新
-        setInterval(refreshEvents, 1000);
+        try {
+          const response = await fetch("/api/reminders", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(result.error || "登録に失敗しました。");
+          }
+
+          todoInput.value = "";
+          setDefaultDatetime();
+          formMessage.textContent = result.message;
+          await refreshReminders();
+        } catch (error) {
+          formMessage.textContent = `${error}`;
+        } finally {
+          submitButton.disabled = false;
+        }
+      });
+
+      testLedButton.addEventListener("click", async () => {
+        testLedButton.disabled = true;
+        formMessage.textContent = "LEDテストを実行しています。";
+
+        try {
+          const response = await fetch("/api/test-led", {
+            method: "POST",
+            cache: "no-store",
+          });
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(result.error || "LEDテストに失敗しました。");
+          }
+
+          formMessage.textContent = result.message;
+        } catch (error) {
+          formMessage.textContent = `${error}`;
+        } finally {
+          testLedButton.disabled = false;
+        }
+      });
+
+      setDefaultDatetime();
+      refreshReminders();
+      setInterval(refreshReminders, 1000);
     </script>
-</body>
+  </body>
 </html>
