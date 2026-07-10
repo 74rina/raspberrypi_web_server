@@ -8,13 +8,19 @@ from threading import Event, Lock, Thread
 from typing import Callable
 from uuid import uuid4
 
-
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 LOG_DIR = BASE_DIR / "logs"
 DATA_FILE = DATA_DIR / "reminders.json"
 LOG_FILE = LOG_DIR / "reminder.log"
 
+# エラーロガーの初期化
+reminder_logger = logging.getLogger("reminder")
+reminder_logger.setLevel(logging.INFO)
+reminder_logger.propagate = False
+reminder_logger.addHandler(logging.NullHandler())
+
+# リマインダーの状態
 STATUS_LABELS = {
     "pending": "待機中",
     "notified": "通知済み",
@@ -22,43 +28,26 @@ STATUS_LABELS = {
     "canceled": "取消",
 }
 
-
+# 入力エラーのバリデーション
 class ReminderValidationError(ValueError):
-    """リマインダー入力に問題がある場合のエラー。"""
+    pass
 
 
-reminder_logger = logging.getLogger("reminder")
-reminder_logger.setLevel(logging.INFO)
-reminder_logger.propagate = False
+#
+# ヘルパー関数
+#
 
-if not reminder_logger.handlers:
-    LOG_DIR.mkdir(exist_ok=True)
-
-    file_handler = logging.FileHandler(
-        LOG_FILE,
-        encoding="utf-8",
-    )
-
-    file_handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)s | %(levelname)s | %(message)s"
-        )
-    )
-
-    reminder_logger.addHandler(file_handler)
-
-
-# 現在時刻をタイムゾーン付きで取得
+# 現在時刻を取得する関数
 def _now() -> datetime:
     return datetime.now().astimezone()
 
 
-# ローカル環境のタイムゾーンを取得
+# ローカル環境のタイムゾーンを取得する関数
 def _local_timezone():
     return _now().tzinfo
 
 
-# 日時文字列を画面表示用の形式に変換
+# 日時文字列を画面表示用の形式に変換する関数
 def _format_datetime(value: str | None) -> str:
     if not value:
         return "-"
@@ -73,12 +62,12 @@ def _format_datetime(value: str | None) -> str:
     )
 
 
-# ログに出力する文字列から余分な空白や改行を削除
+# 余分な空白や改行を削除する関数
 def _clean_log_text(value: str) -> str:
     return " ".join(value.split())
 
 
-# リマインダーを画面表示用のデータに変換
+# リマインダーを画面表示用のデータに変換する関数
 def _serialize(reminder: dict[str, str]) -> dict[str, str]:
     serialized = dict(reminder)
     serialized["status_label"] = STATUS_LABELS.get(
@@ -98,29 +87,6 @@ def _serialize(reminder: dict[str, str]) -> dict[str, str]:
     return serialized
 
 
-# リマインダー一覧を並び替えるためのキーを作成
-def _sort_key(reminder: dict[str, str]):
-    status_order = {
-        "pending": 0,
-        "notified": 1,
-        "done": 2,
-        "canceled": 3,
-    }
-
-    remind_at = reminder.get("remind_at", "")
-
-    if reminder.get("status") == "pending":
-        return (
-            status_order["pending"],
-            remind_at,
-        )
-
-    return (
-        status_order.get(reminder.get("status", ""), 9),
-        reminder.get("notified_at")
-        or reminder.get("updated_at")
-        or reminder.get("created_at", ""),
-    )
 
 #
 # リマインダーの保存、状態更新、通知時刻の監視するクラス
@@ -151,15 +117,8 @@ class ReminderService:
 
     # リマインダー一覧を取得
     def list_reminders(self):
-        """画面表示用にリマインダー一覧を返す。"""
-
         with self._lock:
-            reminders = sorted(
-                self._reminders,
-                key=_sort_key,
-            )
-
-            return [_serialize(reminder) for reminder in reminders]
+            return [_serialize(reminder) for reminder in self._reminders]
 
 
     # リマインダーを作成
@@ -272,6 +231,7 @@ class ReminderService:
                     _clean_log_text(reminder["todo"]),
                 )
                 self._notify_callback()
+
 
     # 通知時刻を過ぎたリマインダーを通知済みに変更
     def _mark_due_reminders(self) -> list[dict[str, str]]:
