@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+    <title>Raspberry Pi Web Security Monitor</title>
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+</head>
+
+<body>
+    <main class="container">
+        <header>
+            <p class="eyebrow">Raspberry Pi Security System</p>
+            <h1>Webアクセス監視システム</h1>
+            <p class="description">
+                不審なURLや短時間の大量アクセスを検知し、
+                Raspberry PiのLEDで通知します。
+            </p>
+        </header>
+
+        <section class="status-card">
+            <div>
+                <p class="label">直近のアクセス判定</p>
+                <p id="statusText" class="status normal">
+                    NORMAL
+                </p>
+            </div>
+
+            <p id="statusDetail">
+                アクセス履歴を取得しています。
+            </p>
+        </section>
+
+        <section class="test-panel">
+            <h2>検知テスト</h2>
+
+            <p>
+                警告条件：
+                {{ rate_limit_window }}秒以内に
+                {{ rate_limit_requests }}回以上のアクセス
+            </p>
+
+            <div class="button-group">
+                <button id="attackButton" class="danger-button">
+                    /attack にアクセス
+                </button>
+
+                <button id="burstButton" class="warning-button">
+                    大量アクセスを模擬
+                </button>
+            </div>
+
+            <p id="testMessage" class="test-message"></p>
+        </section>
+
+        <section class="event-panel">
+            <div class="section-heading">
+                <h2>アクセス履歴</h2>
+                <span>自動更新</span>
+            </div>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>時刻</th>
+                            <th>IPアドレス</th>
+                            <th>メソッド</th>
+                            <th>アクセス先</th>
+                            <th>判定</th>
+                            <th>理由</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="eventsBody">
+                        <tr>
+                            <td colspan="6">
+                                アクセス履歴を読み込んでいます。
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const statusText =
+            document.getElementById("statusText");
+        const statusDetail =
+            document.getElementById("statusDetail");
+        const eventsBody =
+            document.getElementById("eventsBody");
+        const attackButton =
+            document.getElementById("attackButton");
+        const burstButton =
+            document.getElementById("burstButton");
+        const testMessage =
+            document.getElementById("testMessage");
+
+        function createCell(value) {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            return cell;
+        }
+
+        function updateStatus(event) {
+            if (!event) {
+                statusText.textContent = "NO DATA";
+                statusText.className = "status";
+                statusDetail.textContent =
+                    "まだアクセス履歴がありません。";
+                return;
+            }
+
+            statusText.textContent = event.status;
+            statusText.className =
+                event.status === "ALERT"
+                    ? "status alert"
+                    : "status normal";
+
+            statusDetail.textContent =
+                event.status === "ALERT"
+                    ? event.reason
+                    : "不審なアクセスは検知されていません。";
+        }
+
+        function renderEvents(events) {
+            eventsBody.replaceChildren();
+
+            if (events.length === 0) {
+                const row = document.createElement("tr");
+                const cell = createCell(
+                    "まだアクセス履歴がありません。"
+                );
+
+                cell.colSpan = 6;
+                row.appendChild(cell);
+                eventsBody.appendChild(row);
+                return;
+            }
+
+            for (const event of events) {
+                const row = document.createElement("tr");
+
+                if (event.status === "ALERT") {
+                    row.classList.add("alert-row");
+                }
+
+                row.appendChild(createCell(event.time));
+                row.appendChild(createCell(event.ip));
+                row.appendChild(createCell(event.method));
+                row.appendChild(createCell(event.target));
+                row.appendChild(createCell(event.status));
+                row.appendChild(createCell(event.reason));
+
+                eventsBody.appendChild(row);
+            }
+        }
+
+        async function refreshEvents() {
+            try {
+                const response = await fetch(
+                    "/api/events",
+                    { cache: "no-store" }
+                );
+
+                if (!response.ok) {
+                    throw new Error(
+                        `HTTP ${response.status}`
+                    );
+                }
+
+                const events = await response.json();
+
+                renderEvents(events);
+                updateStatus(events[0]);
+            } catch (error) {
+                statusDetail.textContent =
+                    `履歴を取得できませんでした: ${error}`;
+            }
+        }
+
+        attackButton.addEventListener(
+            "click",
+            async () => {
+                attackButton.disabled = true;
+                testMessage.textContent =
+                    "攻撃テストを送信しています。";
+
+                try {
+                    const response = await fetch(
+                        "/attack",
+                        { cache: "no-store" }
+                    );
+
+                    const result = await response.json();
+
+                    testMessage.textContent =
+                        result.message;
+
+                    await refreshEvents();
+                } catch (error) {
+                    testMessage.textContent =
+                        `テストに失敗しました: ${error}`;
+                } finally {
+                    attackButton.disabled = false;
+                }
+            }
+        );
+
+        burstButton.addEventListener(
+            "click",
+            async () => {
+                burstButton.disabled = true;
+                testMessage.textContent =
+                    "短時間に12回アクセスしています。";
+
+                const testId = Date.now();
+
+                try {
+                    const requests = [];
+
+                    for (let i = 0; i < 12; i += 1) {
+                        requests.push(
+                            fetch(
+                                `/probe?n=${testId}-${i}`,
+                                { cache: "no-store" }
+                            )
+                        );
+                    }
+
+                    await Promise.all(requests);
+
+                    testMessage.textContent =
+                        "大量アクセスの送信が完了しました。";
+
+                    await refreshEvents();
+                } catch (error) {
+                    testMessage.textContent =
+                        `テストに失敗しました: ${error}`;
+                } finally {
+                    burstButton.disabled = false;
+                }
+            }
+        );
+
+        refreshEvents();
+
+        // 1秒ごとに履歴を更新
+        setInterval(refreshEvents, 1000);
+    </script>
+</body>
+</html>
