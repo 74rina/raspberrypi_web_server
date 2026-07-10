@@ -10,8 +10,14 @@ body {
         BlinkMacSystemFont,
         "Segoe UI",
         sans-serif;
-    color: #1f2933;
-    background: #f3f7f4;
+    color: #3b2415;
+    background:
+        linear-gradient(
+            rgba(124, 45, 18, 0.18),
+            rgba(249, 115, 22, 0.24)
+        ),
+        url("background.png") center / cover fixed no-repeat;
+    background-color: #fb923c;
 }
 
 button,
@@ -42,21 +48,25 @@ button:disabled {
 
 .eyebrow {
     margin: 0 0 8px;
-    color: #667085;
+    color: #ffedd5;
     font-size: 13px;
     font-weight: 700;
     letter-spacing: 0;
     text-transform: uppercase;
+    text-shadow: 0 1px 8px rgba(67, 20, 7, 0.36);
 }
 
 h1 {
     margin: 0;
+    color: #fff7ed;
     font-size: 40px;
     line-height: 1.2;
+    text-shadow: 0 2px 12px rgba(67, 20, 7, 0.38);
 }
 
 h2 {
     margin: 0 0 18px;
+    color: #7c2d12;
     font-size: 22px;
 }
 
@@ -65,10 +75,11 @@ h2 {
 .list-panel {
     margin-bottom: 22px;
     padding: 22px;
-    border: 1px solid #d7dfd9;
+    border: 1px solid rgba(255, 237, 213, 0.40);
     border-radius: 8px;
-    background: #ffffff;
-    box-shadow: 0 16px 35px rgba(30, 57, 42, 0.08);
+    background: rgba(255, 247, 237, 0.58);
+    box-shadow: 0 18px 42px rgba(124, 45, 18, 0.16);
+    backdrop-filter: blur(4px);
 }
 
 .status-panel {
@@ -80,7 +91,7 @@ h2 {
 
 .label {
     margin: 0 0 8px;
-    color: #667085;
+    color: #9a3412;
     font-size: 14px;
 }
 
@@ -90,8 +101,8 @@ h2 {
     margin: 0;
     padding: 8px 12px;
     border-radius: 8px;
-    color: #344054;
-    background: #eef2f6;
+    color: #7c2d12;
+    background: rgba(255, 237, 213, 0.88);
     font-size: 14px;
     font-weight: 800;
     letter-spacing: 0;
@@ -99,23 +110,23 @@ h2 {
 }
 
 .status.waiting {
-    color: #05603a;
-    background: #d1fadf;
+    color: #7c2d12;
+    background: rgba(254, 215, 170, 0.92);
 }
 
 .status.notified {
-    color: #b54708;
-    background: #fef0c7;
+    color: #ffffff;
+    background: rgba(234, 88, 12, 0.86);
 }
 
 .status.error {
-    color: #b42318;
-    background: #fee4e2;
+    color: #ffffff;
+    background: rgba(185, 28, 28, 0.82);
 }
 
 #statusDetail {
     margin: 0;
-    color: #475467;
+    color: #5c3b22;
     line-height: 1.7;
     text-align: right;
 }
@@ -129,7 +140,7 @@ h2 {
 label {
     display: grid;
     gap: 8px;
-    color: #344054;
+    color: #7c2d12;
     font-weight: 700;
 }
 
@@ -137,15 +148,15 @@ input {
     width: 100%;
     min-height: 46px;
     padding: 10px 12px;
-    border: 1px solid #cfd7d2;
+    border: 1px solid #fed7aa;
     border-radius: 8px;
-    color: #101828;
-    background: #ffffff;
+    color: #431407;
+    background: rgba(255, 255, 255, 0.88);
 }
 
 input:focus {
-    border-color: #12906b;
-    outline: 3px solid rgba(18, 144, 107, 0.16);
+    border-color: #f97316;
+    outline: 3px solid rgba(249, 115, 22, 0.22);
 }
 
 .button-group,
@@ -169,28 +180,28 @@ input:focus {
 
 .primary-button {
     color: #ffffff;
-    background: #087a5b;
+    background: #ea580c;
 }
 
 .secondary-button {
-    color: #1f2933;
-    background: #dceee7;
+    color: #7c2d12;
+    background: rgba(255, 237, 213, 0.94);
 }
 
 .complete-button {
     color: #ffffff;
-    background: #087a5b;
+    background: #f97316;
 }
 
 .cancel-button {
-    color: #5f4600;
-    background: #fce7a6;
+    color: #7c2d12;
+    background: #fed7aa;
 }
 
 .message {
     min-height: 24px;
     margin: 16px 0 0;
-    color: #475467;
+    color: #5c3b22;
     line-height: 1.6;
 }
 
@@ -202,7 +213,7 @@ input:focus {
 }
 
 .section-heading span {
-    color: #667085;
+    color: #9a3412;
     font-size: 14px;
 }
 
@@ -219,14 +230,14 @@ table {
 th,
 td {
     padding: 13px 12px;
-    border-bottom: 1px solid #e4e7ec;
+    border-bottom: 1px solid rgba(251, 146, 60, 0.26);
     text-align: left;
     vertical-align: middle;
     white-space: nowrap;
 }
 
 th {
-    color: #667085;
+    color: #9a3412;
     font-size: 13px;
 }
 
@@ -237,22 +248,22 @@ td:nth-child(2) {
 }
 
 .status-pending td:nth-child(3) {
-    color: #05603a;
+    color: #c2410c;
     font-weight: 800;
 }
 
 .status-notified {
-    background: #fffbeb;
+    background: rgba(255, 237, 213, 0.66);
 }
 
 .status-notified td:nth-child(3) {
-    color: #b54708;
+    color: #ea580c;
     font-weight: 800;
 }
 
 .status-done td:nth-child(3),
 .status-canceled td:nth-child(3) {
-    color: #667085;
+    color: #9a3412;
     font-weight: 800;
 }
 
