@@ -1,2 +1,0 @@
-2026-07-10 14:44:59,587 | INFO | ip=192.168.0.10 | method=GET | target=/ | status=NORMAL | reason=-
-2026-07-10 14:45:01,356 | WARNING | ip=192.168.0.10 | method=GET | target=/attack | status=ALERT | reason=攻撃テスト用URLへのアクセス
